@@ -15,3 +15,16 @@ class BookspiderSpider(scrapy.Spider):
                 'price': book.css('.product_price .price_color::text').get(),
                 'url': book.css('h3 a').attrib['href'],
             }
+
+        next_page = response.css('li.next a::attr(href)').get()
+
+        if next_page is not None:
+            """
+            indicate the full url for next page, 
+            tells scrapy to go to next_page_url, 
+            callback is what gets executed when response comes back from the url
+            which is run self.parse function
+            it will continue until next_page returns None
+            """
+            next_page_url = 'https://books.toscrape.com/' + next_page
+            yield response.follow(next_page_url, callback=self.parse)
