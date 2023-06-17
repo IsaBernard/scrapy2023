@@ -6,6 +6,18 @@
 
 # useful for handling different item types with a single interface
 from itemadapter import ItemAdapter
+import mysql.connector
+import configparser
+
+
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+host = config.get('mysql', 'host')
+user = config.get('mysql', 'user')
+password = config.get('mysql', 'password')
+database = config.get('mysql', 'database')
+
 
 
 class BookscraperPipeline:
@@ -64,3 +76,92 @@ class BookscraperPipeline:
             adapter['stars'] = 5
 
         return item
+
+
+class SaveToMySQLPipeline:
+
+    def __init__(self, connection):
+        self.connection = connection
+        self.cur = self.connection.cursor()
+        self.create_table()
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+
+        mysql_config = {
+            'user': config.get('mysql', 'user'),
+            'password': config.get('mysql', 'password'),
+            'host': config.get('mysql', 'host'),
+            'database': config.get('mysql', 'database'),
+            'port': config.get('mysql', 'port'),
+        }
+
+        connection = mysql.connector.connect(**mysql_config)
+        return cls(connection)
+
+    def create_table(self):
+        self.cur.execute("""
+            CREATE TABLE IF NOT EXISTS books (
+                id INT NOT NULL AUTO_INCREMENT, 
+                url VARCHAR(255),
+                title TEXT,
+                upc VARCHAR(255),
+                product_type VARCHAR(255),
+                price_excl_tax DECIMAL,
+                price_incl_tax DECIMAL,
+                tax DECIMAL,
+                price DECIMAL,
+                availability INTEGER,
+                num_reviews INTEGER,
+                stars INTEGER,
+                category VARCHAR(255),
+                description TEXT,
+                PRIMARY KEY (id)
+            )
+        """)
+
+    def process_item(self, item, spider):
+        self.store_item(item)
+        return item
+
+    def store_item(self, item):
+        self.cur.execute("""
+            INSERT INTO books (
+                url, 
+                title, 
+                upc, 
+                product_type, 
+                price_excl_tax,
+                price_incl_tax,
+                tax,
+                price,
+                availability,
+                num_reviews,
+                stars,
+                category,
+                description
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+        """, (
+            item["url"],
+            item["title"],
+            item["upc"],
+            item["product_type"],
+            item["price_excl_tax"],
+            item["price_incl_tax"],
+            item["tax"],
+            item["price"],
+            item["availability"],
+            item["num_reviews"],
+            item["stars"],
+            item["category"],
+            str(item["description"])
+        ))
+        self.conn.commit()
+
+    def close_spider(self, spider):
+        self.cur.close()
+        self.conn.close()
